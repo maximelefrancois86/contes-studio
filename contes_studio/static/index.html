@@ -7,13 +7,19 @@
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
-<aside id="side">
-  <h1>Atelier</h1>
-  <nav id="packs" aria-label="Packs"></nav>
-</aside>
-<main id="main"><p class="vide">Choisis un pack à gauche.</p></main>
+<header class="bar">
+  <a id="b-galerie" class="btn-ico" href="#/" title="Tous les ateliers" hidden>←</a>
+  <h1 id="titre">Mes ateliers</h1>
+  <nav id="onglets" hidden>
+    <a data-o="flot">Flot</a><a data-o="repliques">Répliques</a><a data-o="sons">Sons</a><a data-o="illustrations">Illustrations</a>
+  </nav>
+  <a class="btn-ico" href="#/reglages" title="Réglages">⚙</a>
+</header>
+<main id="main"></main>
+<div id="modale" hidden><div class="boite" role="dialog" aria-modal="true"></div></div>
 <div id="toast" role="status" aria-live="polite"></div>
 <audio id="audio"></audio>
+<script src="/static/flot.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

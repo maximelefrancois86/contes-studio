@@ -9,13 +9,22 @@ dependencies = [
     "fastapi>=0.110",
     "uvicorn[standard]>=0.29",
     "ruamel.yaml>=0.18",
+    "python-multipart>=0.0.9",
+    "pillow>=10",
+    "filelock>=3.12",
+    "platformdirs>=4",
+    "psutil>=5.9",
 ]
 
 [project.optional-dependencies]
+bureau = ["pywebview>=5"]        # fenêtre native (WebView2 sous Windows, GTK/Qt sous Linux)
 dev = ["pytest", "httpx"]
 
 [project.scripts]
 contes-studio = "contes_studio.cli:main"
+
+[project.gui-scripts]
+atelier-histoires = "contes_studio.cli:app_par_defaut"
 
 [build-system]
 requires = ["setuptools>=77"]

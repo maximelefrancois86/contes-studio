@@ -15,23 +15,24 @@ sont des fichiers YAML lisibles, et l'agent suit des directives écrites dans le
 
 ## État
 
-Version 0.1, en construction.
+Version 0.2, en construction. Le but : qu'une personne qui ne programme pas crée ses histoires
+sur Windows, avec des formulaires, aidée d'un agent IA (Kilo Code).
 
 | Fonction | État |
 |---|---|
-| Liste des packs, histoires et étapes d'aventure | ✅ |
-| Édition des répliques (texte, personnage, ton) sans toucher au reste du fichier YAML | ✅ |
-| Écoute des voix déjà synthétisées, réplique par réplique ou enchaînées | ✅ |
-| Ré-enregistrement d'une réplique (nouvelle prise de voix synthétique) | prévu |
-| Enregistrement au micro | prévu |
-| Recherche de bruitages (Freesound, CC0) | prévu |
-| Illustrations (ComfyUI, FLUX.1 schnell) et fonds sonores | prévu |
-| Directives pour l'agent IA (brief d'écriture, vérifications) | prévu |
-| Graphe des choix et aperçu « comme sur la conteuse » | prévu |
-| Transfert sur la conteuse (v2, v3) sans Java | prévu |
+| Galerie des ateliers, création d'un nouvel atelier (aventure) | ✅ |
+| **Flot** : graphe sur grille (zoom, déplacement), couverture → étapes → décisions, bulles à accrocher, images et voix dans les nœuds | ✅ |
+| **Répliques** : écrire, ajouter, déplacer, supprimer ; bruitages, musiques, ambiances ; écoute | ✅ |
+| **Sons** : recherche et écoute (Freesound, CC0 ; autres fournisseurs possibles), ajout avec crédit | ✅ |
+| **Illustrations** : ComfyUI (installation guidée si l'ordinateur le permet) ou dépôt d'image, recadrage 4:3, aperçu en gris, alertes de lisibilité | ✅ |
+| Fenêtre de bureau (pywebview) | ✅ (non testée sous Windows) |
+| Paquet Windows, premier lancement guidé | prévu |
+| Refaire une voix, enregistrement au micro, bouton « Fabriquer » | prévu |
+| Directives pour l'agent IA (`AGENTS.md` par atelier) | prévu |
+| Transfert sur la conteuse sans Java | prévu |
 
-Le détail est dans [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md) et l'architecture dans
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Détails : [docs/FEUILLE-DE-ROUTE.md](docs/FEUILLE-DE-ROUTE.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md),
+[docs/WINDOWS.md](docs/WINDOWS.md).
 
 ## Lancer
 
@@ -40,8 +41,9 @@ moment) et lit un espace de travail qui contient `histoires/*.yaml` et `.cache/`
 
 ```bash
 uv venv --python 3.12 ~/.venvs/studio
-uv pip install --python ~/.venvs/studio/bin/python -e . -e ../gen
-~/.venvs/studio/bin/python -m contes_studio serve      # http://127.0.0.1:8090
+uv pip install --python ~/.venvs/studio/bin/python -e ".[bureau,dev]" -e ../gen
+~/.venvs/studio/bin/python -m contes_studio app        # fenêtre de bureau (pip install pywebview)
+~/.venvs/studio/bin/python -m contes_studio serve      # ou dans un navigateur : http://127.0.0.1:8090
 ~/.venvs/studio/bin/python -m pytest -q tests          # tests
 ```
 

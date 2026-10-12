@@ -22,6 +22,31 @@ ligne modifiée, vérifie le pack avec le chargeur du générateur, puis remplac
 un agent IA et un humain peuvent travailler sur les mêmes fichiers, et les commentaires (univers,
 plans) restent en place.
 
+**Brouillons.** L'atelier charge les packs en mode brouillon (`load_pack(..., brouillon=True)`) :
+une aventure en construction (étapes vides, choix sans suite) reste ouvrable et modifiable. La
+vérification complète, celle du build, produit la liste « à compléter » du Flot.
+
+**Graphe (onglet Flot).** Couverture → étape (un fichier audio) → décision (une entrée, une sortie
+par choix). Dans le YAML : `debut`, `etapes[].ensuite` (absent = fin, id d'étape = suite
+automatique, id de `decisions:` = décision partagée, dictionnaire = décision propre à l'étape) et
+`decisions:`. Accrocher une deuxième étape à une décision propre la rend partagée. Les
+modifications de structure réécrivent le fichier avec ruamel (sans perte sur les aventures) ; les
+positions à l'écran sont dans `histoires/<pack>/flot.json`.
+
+**Sons.** `contes_studio/sons/` : une interface `Fournisseur` (chercher, détail, entrée de
+catalogue) et un fournisseur par service ; Freesound pour l'instant (CC0 seulement). Un son ajouté
+est téléchargé dans `.cache/sons/` par le générateur, avec son crédit.
+
+**Illustrations.** `contes_studio/images/` : capacités de l'ordinateur, ComfyUI (état, démarrage,
+installation, génération avec une « commande système » de style), traitement des images déposées
+(recadrage 4:3, 320×240, 16 niveaux de gris, alertes de lisibilité étalonnées sur les illustrations
+existantes). L'image choisie est enregistrée dans `histoires/<pack>/images/` et référencée par
+`image:`.
+
+**Tâches de fond.** Installation et génération tournent dans des tâches suivies par l'interface
+(journal, progression, annulation). Le travail sur la carte graphique prend le verrou partagé avec
+le générateur (`~/.cache/lunii-gpu.lock`).
+
 **Voix.** La clé de cache est celle du générateur (texte prononcé, voix, ton, réglages du modèle) :
 l'atelier retrouve le fichier d'une réplique sans charger le modèle. Une réplique modifiée n'a plus
 de voix en cache, elle est signalée et sera synthétisée au prochain build.
