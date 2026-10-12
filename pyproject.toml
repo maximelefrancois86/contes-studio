@@ -1,0 +1,28 @@
+[project]
+name = "contes-studio"
+version = "0.1.0"
+description = "Atelier d'histoires audio à choix pour enfants : édition, voix, sons, images, transfert vers une conteuse"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "ruamel.yaml>=0.18",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "httpx"]
+
+[project.scripts]
+contes-studio = "contes_studio.cli:main"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["contes_studio*"]
+
+[tool.setuptools.package-data]
+contes_studio = ["static/*"]
