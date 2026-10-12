@@ -145,7 +145,10 @@ async function vueFlotQuestions() {
   const entetes = f.type === "questions"
     ? f.questions.map((q, k) => `<text class="ent" x="${20 + (k + 1) * (NW + GX)}" y="14">${esc(q.slice(0, 30))}</text>`).join("") : "";
   $("#main").innerHTML = `
-    <p class="aide">Pack à questions : chaque colonne est une question, chaque chemin mène à une histoire (graphe en lecture seule).
+    <div class="bandeau rangee"><span style="flex:1">Ce pack « à questions » s'affiche ici en lecture seule. Pour le modifier dans le graphe
+      (ajouter des choix, des étapes, des boucles…), passe-le en graphe éditable : l'enfant entendra les mêmes questions et les mêmes histoires.</span>
+      <button class="bouton principal" id="convertir" title="Transformer ce pack en aventure éditable dans le Flot (une copie de l'original est gardée)">Éditer sous forme de graphe</button></div>
+    <p class="aide">Chaque colonne est une question ; chaque chemin mène à une histoire.
       Clique sur une ${f.type === "questions" ? "histoire" : "étape"} pour modifier ses répliques.</p>
     <div class="flot"><svg width="${W}" height="${HT + 10}" viewBox="0 0 ${W} ${HT + 10}">
       <style>
@@ -159,6 +162,17 @@ async function vueFlotQuestions() {
         .flot .lib{fill:var(--ink-2);font-size:11px}.flot .ent{fill:var(--ink-2);font-size:12px;font-weight:600}
       </style>${entetes}${f.aretes.map(lien).join("")}${Object.keys(pos).map(boite).join("")}</svg></div>`;
   $$(".flot .n[data-section]").forEach((g) => (g.onclick = () => { location.hash = `#/atelier/${S.pid}/repliques/${g.dataset.section}`; }));
+  $("#convertir").onclick = async () => {
+    if (!confirm("Passer ce pack en graphe éditable ?\n\n• Les questions, les choix et les histoires restent les mêmes pour l'enfant.\n"
+      + "• Chaque réponse mène à sa propre copie de la question suivante (les histoires dépendent de tous les choix).\n"
+      + "• Différence : à la fin d'une histoire, la conteuse revient à la liste des packs.\n"
+      + "• Une copie du fichier d'origine est gardée dans le dossier « sauvegardes » du pack.")) return;
+    try {
+      const r = await api(`/api/packs/${S.pid}/convertir`, { method: "POST" });
+      toast(`Graphe éditable : ${r.decisions} décisions, ${r.histoires} histoires. Original gardé.`);
+      vueFlot();
+    } catch (e) { toast(e.message, true); }
+  };
 }
 
 /* ------------------------------------------------------------ répliques */

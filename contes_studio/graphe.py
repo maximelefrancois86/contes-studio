@@ -27,6 +27,11 @@ from .edition import EditError, plain, rt
 QUESTION_DEFAUT = "Que va faire le héros ?"
 
 
+def _jouee(e) -> bool:
+    """Une étape a de l'audio si elle contient une réplique, un bruitage ou une musique."""
+    return any(not (isinstance(l, dict) and set(l) & {"ambiance", "pause"}) for l in (e.get("lignes") or []))
+
+
 def slug(s: str, defaut: str = "x") -> str:
     s = "".join(c for c in unicodedata.normalize("NFD", str(s)) if unicodedata.category(c) != "Mn")
     return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-")[:28] or defaut
@@ -131,7 +136,7 @@ class Graphe:
                     origines[str(ens)].append({"type": "jonction", "jonction": "j:" + str(ens)})
             lignes = [l for l in (e.get("lignes") or []) if not (isinstance(l, dict) and set(l) & {"bruit", "musique", "ambiance", "pause"})]
             arcs.append({"id": sid, "titre": str(e.get("titre") or sid), "repliques": len(lignes),
-                         "vers": vers, "origines": origines.get(sid, [])})
+                         "vers": vers, "origines": origines.get(sid, []), "lien": vers is not None and not _jouee(e)})
         # dédoublonnage : une étape atteinte par une jonction et autre chose garde ses deux origines
         return {"depart": {"arc": deb if deb in origines else None}, "decisions": decisions,
                 "jonctions": list(jonctions.values()), "arcs": arcs, "a_completer": self.a_completer()}
@@ -151,8 +156,8 @@ class Graphe:
                 if o.get("vers") is None or str(o["vers"]) not in ids:
                     msgs.append(f"L'option « {o.get('nom') or oid} » de « {nom} » ne mène encore nulle part.")
         for e in self.etapes:
-            if not any(not (isinstance(l, dict) and set(l) & {"bruit", "musique", "ambiance", "pause"})
-                       for l in (e.get("lignes") or [])):
+            # une étape vide qui mène quelque part est un lien direct (pas d'audio) : seule une fin vide manque
+            if e.get("ensuite") is None and not _jouee(e):
                 msgs.append(f"L'étape « {e.get('titre') or e.get('id')} » n'a pas encore de répliques.")
         vus, pile = set(), [self.debut()] if self.debut() else []
         while pile:
@@ -337,18 +342,46 @@ class Graphe:
         return buf.getvalue()
 
 
-def lire_positions(f: Path) -> dict:
-    try:
-        return json.loads(f.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {"noeuds": {}, "bulles": {}}
+ENTETE_FLOT = "# Disposition du graphe dans l'atelier (onglet Flot) : ignorée par le générateur."
 
 
-def ecrire_positions(f: Path, pos: dict) -> None:
-    f.parent.mkdir(parents=True, exist_ok=True)
-    clean = {"noeuds": {str(k): [round(float(v[0])), round(float(v[1]))] for k, v in (pos.get("noeuds") or {}).items()},
-             "bulles": {str(k): [round(float(v[0])), round(float(v[1]))] for k, v in (pos.get("bulles") or {}).items()}}
-    f.write_text(json.dumps(clean, ensure_ascii=False, indent=1), encoding="utf-8", newline="\n")
+def lire_positions(raw, ancien: Path | None = None) -> dict:
+    """Positions des nœuds (clé `flot:` du pack). Un ancien `flot.json` est repris s'il existe."""
+    f = raw.get("flot") if hasattr(raw, "get") else None
+    if isinstance(f, dict):
+        return {"noeuds": {str(k): list(v) for k, v in (f.get("noeuds") or {}).items()},
+                "bulles": {str(k): list(v) for k, v in (f.get("bulles") or {}).items()}}
+    if ancien and ancien.exists():
+        try:
+            return json.loads(ancien.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            pass
+    return {"noeuds": {}, "bulles": {}}
+
+
+def texte_positions(src: str, pos: dict) -> str:
+    """Remplace (ou ajoute en fin de fichier) le bloc `flot:` ; le reste du fichier ne bouge pas."""
+    from .edition import scalar
+
+    lignes = src.splitlines(keepends=True)
+    debut = next((k for k, l in enumerate(lignes) if l.rstrip() == "flot:" or l.startswith("flot: ")), None)
+    if debut is not None:
+        fin = debut + 1
+        while fin < len(lignes) and (not lignes[fin].strip() or lignes[fin][0] in " \t#"):
+            fin += 1
+        while fin > debut + 1 and not lignes[fin - 1].strip():
+            fin -= 1  # garder les lignes vides qui séparent du bloc suivant
+        if debut > 0 and lignes[debut - 1].strip() == ENTETE_FLOT:
+            debut -= 1
+        del lignes[debut:fin]
+    texte = "".join(lignes).rstrip("\n") + "\n"
+    bloc = ["", ENTETE_FLOT, "flot:"]
+    for section in ("noeuds", "bulles"):
+        valeurs = pos.get(section) or {}
+        if valeurs:
+            bloc.append(f"  {section}:")
+            bloc += [f"    {scalar(str(k))}: [{round(float(v[0]))}, {round(float(v[1]))}]" for k, v in valeurs.items()]
+    return texte + "\n".join(bloc) + "\n"
 
 
 def plain_graphe(g: Graphe) -> dict:  # pragma: no cover - aide au débogage

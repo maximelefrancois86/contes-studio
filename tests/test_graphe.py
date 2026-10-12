@@ -106,3 +106,33 @@ def test_histoire_sans_fin(ws):
     assert ws.graphe(pid)["a_completer"] == []
     pk = load_pack(ws.stories_dir / f"{pid}.yaml", strict=True)
     assert pk.stories and all("↺" in st.title for st in pk.stories)
+
+
+def test_positions_dans_le_pack(ws):
+    f = ws.stories_dir / f"{AV}.yaml"
+    avant = f.read_text(encoding="utf-8")
+    pos = {"noeuds": {"couverture": [40, 120], "@prairie": [600.4, 300]}, "bulles": {"fin": [900, 500]}}
+    ws.ecrire_positions(AV, pos)
+    texte = f.read_text(encoding="utf-8")
+    assert texte.startswith(avant.rstrip("\n")) and "flot:" in texte  # le reste du fichier ne bouge pas
+    assert ws.graphe(AV)["positions"] == {"noeuds": {"couverture": [40, 120], "@prairie": [600, 300]}, "bulles": {"fin": [900, 500]}}
+    ws.ecrire_positions(AV, {"noeuds": {"couverture": [50, 130]}, "bulles": {}})
+    texte2 = f.read_text(encoding="utf-8")
+    assert texte2.count("flot:") == 1 and "@prairie" not in texte2
+    load_pack(f, strict=True)  # le générateur ignore la clé
+    d = ws.graphe_op(AV, {"op": "creer_decision"})["resultat"]  # une réécriture complète garde les positions
+    assert ws.graphe(AV)["positions"]["noeuds"]["couverture"] == [50, 130]
+    ws.graphe_op(AV, {"op": "supprimer_decision", "decision": d})
+
+
+def test_conversion_pack_a_questions(ws):
+    avant = load_pack(ws.stories_dir / "dragon-timide.yaml", strict=True)
+    r = ws.convertir_en_aventure("dragon-timide")
+    apres = load_pack(ws.stories_dir / "dragon-timide.yaml", strict=True)
+    assert apres.adventure and len(apres.stories) == len(avant.stories) == r["histoires"]
+    textes = {tuple(l.text for l in s.lines if l.speaker) for s in avant.stories}
+    assert all(any(t[-len(a):] == a for t in (tuple(l.text for l in s.lines if l.speaker) for s in apres.stories)) for a in textes)
+    assert ws.graphe("dragon-timide")["a_completer"] == []
+    assert (ws.stories_dir / r["sauvegarde"]).exists()
+    with pytest.raises(EditError):
+        ws.convertir_en_aventure("dragon-timide")

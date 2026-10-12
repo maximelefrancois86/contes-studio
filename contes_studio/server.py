@@ -99,7 +99,8 @@ class Proposer(BaseModel):
 def _png(img) -> Response:
     buf = io.BytesIO()
     img.save(buf, "PNG")
-    return Response(buf.getvalue(), media_type="image/png", headers={"Cache-Control": "no-store"})
+    # l'adresse porte une version (?v=…) qui change quand l'image change : le navigateur peut la garder
+    return Response(buf.getvalue(), media_type="image/png", headers={"Cache-Control": "private, max-age=3600"})
 
 
 def ffmpeg_exe() -> str:
@@ -196,6 +197,13 @@ def create_app(root: Path, reglages: Reglages | None = None) -> FastAPI:
         except (EditError, KeyError) as e:
             erreur(e)
         return {**r, "graphe": ws.graphe(pid, voix.path)}
+
+    @app.post("/api/packs/{pid}/convertir")
+    def convertir(pid: str):
+        try:
+            return ws.convertir_en_aventure(pid)
+        except EditError as e:
+            erreur(e)
 
     @app.put("/api/packs/{pid}/graphe/positions")
     def positions(pid: str, pos: dict):

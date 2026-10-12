@@ -4,16 +4,19 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Atelier d'histoires</title>
+<link rel="icon" href="/static/icone.svg" type="image/svg+xml">
+<link rel="icon" href="/static/icone-256.png" type="image/png" sizes="256x256">
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
 <header class="bar">
+  <a class="logo" href="#/" title="Atelier d'histoires : tous mes ateliers"><img src="/static/icone.svg" alt="Atelier d'histoires"></a>
   <a id="b-galerie" class="btn-ico" href="#/" title="Tous les ateliers" hidden>←</a>
   <h1 id="titre">Mes ateliers</h1>
   <nav id="onglets" hidden>
     <a data-o="flot" title="Le déroulé de l'histoire : étapes et décisions">Flot</a><a data-o="repliques" title="Écrire les répliques de chaque étape">Répliques</a><a data-o="voix" title="Faire, refaire ou enregistrer les voix, personnage par personnage">Voix</a><a data-o="sons" title="Bruitages, musiques et ambiances">Sons</a><a data-o="illustrations" title="Images de la couverture, des choix et des étapes">Illustrations</a>
   </nav>
-  <a class="btn-ico" href="#/reglages" title="Réglages">⚙</a>
+  <a class="btn-ico" href="#/reglages" title="Réglages (voix, sons, illustrations)">⚙</a>
 </header>
 <main id="main"></main>
 <div id="modale" hidden><div class="boite" role="dialog" aria-modal="true"></div></div>

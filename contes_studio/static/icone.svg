@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <title>Atelier d'histoires</title>
+  <rect width="256" height="256" rx="58" fill="#29C6D4"/>
+  <!-- livre ouvert -->
+  <path d="M128 206 C104 190 70 186 36 192 V104 C70 98 104 102 128 118 Z" fill="#FFFFFF"/>
+  <path d="M128 206 C152 190 186 186 220 192 V104 C186 98 152 102 128 118 Z" fill="#FCEEE4"/>
+  <path d="M128 118 V206" stroke="#1d9aa6" stroke-width="5" stroke-linecap="round"/>
+  <path d="M58 132 C78 129 98 131 112 138 M58 154 C78 151 98 153 112 160" stroke="#29C6D4" stroke-width="6" stroke-linecap="round" fill="none" opacity=".55"/>
+  <!-- bulle de parole : une histoire qu'on écoute -->
+  <path d="M150 26 H210 A26 26 0 0 1 236 52 V80 A26 26 0 0 1 210 106 H174 L154 124 L158 106 H150 A26 26 0 0 1 124 80 V52 A26 26 0 0 1 150 26 Z" fill="#E95B67"/>
+  <path d="M168 48 L198 66 L168 84 Z" fill="#FFFFFF"/>
+  <!-- étincelle -->
+  <path d="M70 36 L77 56 L97 63 L77 70 L70 90 L63 70 L43 63 L63 56 Z" fill="#FF8C5F"/>
+</svg>

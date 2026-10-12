@@ -24,6 +24,7 @@ async function vueFlot() {
   $("#main").innerHTML = `<p class="vide">Chargement…</p>`;
   const g = await api(`/api/packs/${S.pid}/graphe`);
   if (g.type === "questions") return vueFlotQuestions();
+  if (F.pid !== S.pid) { F.pid = S.pid; F.zoom = 1; F.sel = null; }  // autre atelier : vue remise à zéro
   F.g = g; F.sel = F.sel && trouver(F.sel) ? F.sel : null;
   F.pos = { noeuds: { ...(g.positions?.noeuds || {}) }, bulles: { ...(g.positions?.bulles || {}) } };
   disposer();
@@ -186,6 +187,14 @@ function dessiner() {
       const cx = o.type === "option" || o.type === "depart" ? debut[0] + 14 + AW / 2 : (debut[0] + fin[0]) / 2;
       const cy = o.type === "option" || o.type === "depart" ? debut[1] : (debut[1] + fin[1]) / 2;
       const etat = a.repliques ? `${a.repliques} répliques${a.manquantes ? ` · ${a.manquantes} voix à faire` : ""}` : "aucune réplique";
+      if (a.lien) {  // lien direct : pas d'audio, on passe tout droit à la suite
+        return `<g class="arc lien" data-arc="${esc(a.id)}">
+          <path class="trait" d="${courbe(debut, fin)}"/><path class="prise" d="${courbe(debut, fin)}">${tip("Lien direct : l'histoire passe tout droit à la suite, sans audio. Double-clic pour y ajouter des répliques.")}</path>
+          ${k === 0 ? `<g class="carte-etape lien" transform="translate(${debut[0] + 16},${debut[1] - 12})"><rect width="92" height="24" rx="12"/>
+            <text x="46" y="16" text-anchor="middle" class="petit">lien direct</text>${tip("Lien direct (sans audio). Double-clic : ajouter des répliques pour en faire une étape.")}</g>
+            <circle class="bulle accrochee" data-bulle="${esc(a.id)}" cx="${fin[0]}" cy="${fin[1]}" r="7">${tip("Bout du lien : glisse-le sur une autre décision, ou dans le vide pour finir ici")}</circle>` : ""}
+        </g>`;
+      }
       return `<g class="arc${a.repliques ? "" : " vide"}" data-arc="${esc(a.id)}">
         <path class="trait" d="${courbe(debut, fin)}"/><path class="prise" d="${courbe(debut, fin)}">${tip("Étape « " + a.titre + " » : clique pour la sélectionner, double-clique pour écrire ses répliques")}</path>
         ${k === 0 ? `<g class="carte-etape" transform="translate(${cx - AW / 2},${cy - AH / 2})">
@@ -469,7 +478,8 @@ function panneau() {
     $("#p-fiche").onclick = () => ficheDecision(x.id);
     $("#p-del").onclick = supprimerSel;
   } else if (s?.type === "arc" && x) {
-    const fin = x.vers ? (x.vers.startsWith("j:") ? "continue sans question" : "mène à une décision") : "fin de l'histoire";
+    const fin = x.lien ? "lien direct : aucune réplique, l'histoire passe tout droit à la suite"
+      : x.vers ? (x.vers.startsWith("j:") ? "continue sans question" : "mène à une décision") : "fin de l'histoire";
     el.innerHTML = `<h2>Étape</h2><label class="aide">Titre</label><input type="text" id="p-t" value="${esc(x.titre)}" style="width:100%" title="Titre de l'étape (pour toi ; il n'est pas lu)">
       <p class="aide">${x.repliques} répliques · ${fin}${x.manquantes ? ` · ${x.manquantes} voix à faire` : ""}</p>
       <div class="rangee"><button class="bouton principal" id="p-ouvrir" title="Ouvrir l'onglet Répliques sur cette étape">Écrire les répliques</button>

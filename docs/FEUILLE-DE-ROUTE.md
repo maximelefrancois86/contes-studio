@@ -49,6 +49,15 @@ enchaînées.
 - Thème aux couleurs choisies (turquoise, blanc, crème, orange, corail) ; lanceurs `atelier.sh`
   et `atelier.bat`.
 
+**0.3.1 — Graphe pour tous les packs.**
+- Un pack « à questions » passe en graphe éditable d'un clic (copie de l'original gardée) : arbre
+  de décisions (l'histoire dépend de toute la combinaison de choix), liens directs sans audio entre
+  questions, images déjà générées conservées. Générateur : étape sans réplique qui mène à une suite
+  = lien direct (aucun nœud audio dans l'archive).
+- Positions du graphe enregistrées dans le pack (clé `flot:`).
+- Icône de l'atelier ; palette appliquée partout (atelier et site d'écoute), même en mode sombre.
+- Lectures du pack mémorisées : un gros pack (Tiny) s'affiche sans bloquer le serveur.
+
 ## Prochaines étapes
 
 **0.4 — Pour Pépé, sous Windows.**

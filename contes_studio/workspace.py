@@ -27,6 +27,35 @@ def load_pack(path, strict: bool = False):
     """L'atelier travaille sur des brouillons : un pack en construction reste ouvrable et modifiable.
     La vérification complète (celle du build) se fait avec strict=True."""
     return _load_pack(path, brouillon=not strict)
+
+
+# Lectures mémorisées tant que le fichier n'a pas changé (date et taille) : un gros pack (Tiny) prend
+# près de 2 s à analyser, et chaque vignette d'image ou de voix en a besoin. Réservé aux lectures :
+# les modifications relisent toujours le fichier.
+_MEMO: dict = {}
+
+
+def _cle(path: Path) -> tuple:
+    st = Path(path).stat()
+    return (str(path), st.st_mtime_ns, st.st_size)
+
+
+def _memo(genre: str, path: Path, calcul):
+    cle = (genre,) + _cle(path)
+    if cle not in _MEMO:
+        for k in [k for k in _MEMO if k[:2] == cle[:2]]:
+            del _MEMO[k]  # anciennes versions du même fichier
+        _MEMO[cle] = calcul()
+    return _MEMO[cle]
+
+
+def lire_raw(path: Path):
+    """Arbre ruamel du pack, en lecture seule (ne pas le modifier : il est partagé)."""
+    return _memo("raw", path, lambda: rt().load(Path(path).read_text(encoding="utf-8")))
+
+
+def lire_pack(path: Path):
+    return _memo("pack", path, lambda: load_pack(path))
 _PLAIN = re.compile(r"^[A-Za-zÀ-ÿ0-9_\-]+$")
 
 
@@ -78,8 +107,8 @@ class Workspace:
     def pack(self, pid: str, audio_path=None) -> dict:
         """Structure du pack pour l'éditeur. `audio_path(texte, voix, ton)` -> chemin du son en cache ou None."""
         path = self.pack_path(pid)
-        pk = load_pack(path)
-        raw = _rt().load(path.read_text(encoding="utf-8"))
+        pk = lire_pack(path)
+        raw = lire_raw(path)
         sections = []
         for sec in SECTIONS:
             for i, item in enumerate(raw.get(sec) or []):
@@ -127,7 +156,7 @@ class Workspace:
     # -- flot ------------------------------------------------------------------
     def flot(self, pid: str) -> dict:
         """Graphe des choix : arbre questions → options → histoires, ou graphe des étapes d'une aventure."""
-        pk = load_pack(self.pack_path(pid))
+        pk = lire_pack(self.pack_path(pid))
         noeuds = [{"id": "c", "type": "couverture", "titre": pk.title, "slot": "couverture"}]
         aretes = []
         if not pk.adventure:
@@ -172,10 +201,10 @@ class Workspace:
         from .graphe import Graphe, lire_positions
 
         path = self.pack_path(pid)
-        raw = _rt().load(path.read_text(encoding="utf-8"))
+        raw = lire_raw(path)
         if "etapes" not in raw and raw.get("histoires"):
             return {"type": "questions"}
-        pk = load_pack(path)
+        pk = lire_pack(path)
         g = Graphe(raw)
         v = g.vue()
         ems = {tuple(map(str, e["chemin"])): e["slot"] for e in self.emplacements(pid)}
@@ -215,7 +244,7 @@ class Workspace:
                 else:
                     a["manquantes"] += 1
         v.update({"type": "aventure", "titre": pk.title, "couverture": {"slot": "couverture", "audio": audio(pk.title)},
-                  "positions": lire_positions(self.stories_dir / pid / "flot.json")})
+                  "positions": lire_positions(raw, self.stories_dir / pid / "flot.json")})
         return v
 
     def graphe_op(self, pid: str, op: dict) -> dict:
@@ -245,11 +274,147 @@ class Workspace:
         self._check_and_write(path, g.texte())
         return {"resultat": res}
 
-    def ecrire_positions(self, pid: str, pos: dict) -> None:
-        from .graphe import ecrire_positions
+    def convertir_en_aventure(self, pid: str) -> dict:
+        """Pack « à questions » → aventure éditable dans le Flot, à l'identique pour l'enfant :
+        questions posées dans le même ordre, mêmes histoires pour les mêmes choix.
 
-        self.pack_path(pid)
-        ecrire_positions(self.stories_dir / pid / "flot.json", pos)
+        L'histoire dépend de toute la combinaison de choix : chaque réponse mène à sa propre copie de la
+        question suivante (arbre), par un lien direct sans audio. Les images déjà générées sont gardées
+        (copiées dans le dossier du pack) ; l'original est sauvegardé dans `<pack>/sauvegardes/`."""
+        import shutil
+        from datetime import datetime
+
+        from ruamel.yaml.comments import CommentedMap, CommentedSeq
+
+        from .graphe import _unique, slug
+
+        path = self.pack_path(pid)
+        src = path.read_text(encoding="utf-8")
+        raw = _rt().load(src)
+        if "etapes" in raw or not raw.get("histoires"):
+            raise EditError("Ce pack est déjà une aventure")
+        questions = list(raw.get("questions") or [])
+        histoires = list(raw["histoires"])
+        avant = {e["slot"]: e for e in self.emplacements(pid)}
+
+        sauve = self.stories_dir / pid / "sauvegardes"
+        sauve.mkdir(parents=True, exist_ok=True)
+        copie = sauve / f"{pid}-avant-flot-{datetime.now():%Y%m%d-%H%M%S}.yaml"
+        copie.write_text(src, encoding="utf-8", newline="\n")
+
+        # images déjà générées pour les choix : la graine change dans une aventure, on garde l'image elle-même
+        from lunii_gen import illustrate as il
+        import hashlib
+
+        images = self.dossier_images(pid)
+        garder: dict[tuple[int, str], str] = {}
+        for qi, q in enumerate(questions):
+            opts = q.get("options") or {}
+            for oid, o in (opts.items() if isinstance(opts, dict) else [(x.get("id"), x) for x in opts]):
+                e = avant.get(f"q{qi}-{oid}")
+                if not e or e.get("image") or not e.get("description"):
+                    continue
+                cle = hashlib.sha1(f"{il.MODEL}|{il.STYLE}|{e['graine']}|{e['description']}".encode()).hexdigest()
+                cache = self.root / ".cache" / "img" / f"{cle}.png"
+                if cache.exists():
+                    images.mkdir(parents=True, exist_ok=True)
+                    shutil.copy(cache, images / f"q{qi}-{oid}.png")
+                    garder[(qi, str(oid))] = f"{pid}/images/q{qi}-{oid}.png"
+
+        def options_de(qi):
+            opts = questions[qi].get("options") or {}
+            return list(opts.items()) if isinstance(opts, dict) else [(x.get("id"), x) for x in opts]
+
+        pris: set[str] = set()
+        etapes, decisions = CommentedSeq(), CommentedMap()
+        id_histoire = {}
+        for h in histoires:  # les histoires d'abord : même rang, donc mêmes images générées qu'avant
+            hid = _unique(slug(h.get("titre") or "histoire", "histoire"), pris)
+            pris.add(hid)
+            id_histoire[tuple(str(c) for c in h.get("choix") or [])] = hid
+            e = CommentedMap([("id", hid)])
+            for k, v in h.items():
+                if k != "choix":
+                    e[k] = v
+            etapes.append(e)
+        prefixes = {cs[:k] for cs in id_histoire for k in range(len(cs))}
+        liens = []
+
+        def decision(prefixe: tuple) -> str:
+            k = len(prefixe)
+            q = questions[k]
+            did = _unique(slug("-".join([q.get("question") or f"question-{k + 1}", *prefixe]), "choix"), pris)
+            pris.add(did)
+            opts = CommentedMap()
+            for oid, o in options_de(k):
+                suite = prefixe + (str(oid),)
+                if suite not in prefixes and suite not in id_histoire:
+                    continue  # comme sur la conteuse : un choix sans histoire derrière n'est pas proposé
+                d = CommentedMap([("nom", o if isinstance(o, str) else (o.get("nom") or o.get("label") or oid))])
+                if not isinstance(o, str):
+                    for cle in ("illustration", "image"):
+                        if o.get(cle):
+                            d[cle] = o[cle]
+                if (k, str(oid)) in garder and "image" not in d:
+                    d["image"] = garder[(k, str(oid))]
+                if suite in id_histoire:
+                    d["vers"] = id_histoire[suite]
+                else:
+                    d["vers"] = lien(suite)
+                d.fa.set_flow_style()
+                opts[str(oid)] = d
+            decisions[did] = CommentedMap([("question", q.get("question") or q.get("texte") or ""), ("options", opts)])
+            return did
+
+        def lien(prefixe: tuple) -> str:
+            lid = _unique("lien-" + ("-".join(prefixe) if prefixe else "debut"), pris)
+            pris.add(lid)
+            vide = CommentedSeq()
+            vide.fa.set_flow_style()
+            e = CommentedMap([("id", lid), ("titre", "Question suivante" if prefixe else "Première question"),
+                              ("lignes", vide)])
+            liens.append(e)
+            e["ensuite"] = decision(prefixe)
+            return lid
+
+        debut = lien(())
+        for e in liens:
+            etapes.append(e)
+        nouveau = CommentedMap()
+        for k, v in raw.items():
+            if k in ("questions", "histoires"):
+                continue
+            nouveau[k] = v
+        nouveau["debut"] = debut
+        nouveau["etapes"] = etapes
+        nouveau["decisions"] = decisions
+        if hasattr(raw, "ca") and raw.ca.comment:  # commentaires d'en-tête (univers, plans)
+            nouveau.ca.comment = raw.ca.comment
+        import io as _io
+
+        buf = _io.StringIO()
+        _rt().dump(nouveau, buf)
+        self._check_and_write(path, buf.getvalue())
+        return {"sauvegarde": str(copie.relative_to(self.stories_dir)), "decisions": len(decisions),
+                "histoires": len(id_histoire), "images_gardees": len(garder)}
+
+    def ecrire_positions(self, pid: str, pos: dict) -> None:
+        """Positions dans le pack lui-même (clé `flot:`) : on retrouve le graphe tel qu'on l'a laissé.
+        Seul le bloc `flot:` est réécrit ; il n'a pas d'effet sur l'histoire, d'où l'écriture directe."""
+        import os
+        import tempfile
+
+        from .graphe import texte_positions
+
+        path = self.pack_path(pid)
+        texte = texte_positions(path.read_text(encoding="utf-8"), pos)
+        fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.stem}-", suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+            f.write(texte)
+        os.replace(tmp, path)
+        ancien = self.stories_dir / pid / "flot.json"
+        if ancien.exists():
+            ancien.unlink()  # remplacé par la clé `flot:` du pack
 
     def creer_pack(self, titre: str, narrateur: str = "conteur") -> str:
         """Nouvel atelier : une aventure vide, prête à être construite dans l'onglet Flot."""
@@ -282,8 +447,8 @@ class Workspace:
         from lunii_gen.sons import Sonotheque
 
         path = self.pack_path(pid)
-        pk = load_pack(path)
-        raw = _rt().load(path.read_text(encoding="utf-8"))
+        pk = lire_pack(path)
+        raw = lire_raw(path)
         usages: dict[str, int] = {}
         for sec in SECTIONS:
             for item in raw.get(sec) or []:
@@ -308,7 +473,7 @@ class Workspace:
     def chemin_son(self, pid: str, sid: str) -> Path | None:
         from lunii_gen.sons import Sonotheque
 
-        pk = load_pack(self.pack_path(pid))
+        pk = lire_pack(self.pack_path(pid))
         if sid not in pk.sounds:
             return None
         sono = Sonotheque(self.root / ".cache" / "sons")
@@ -353,8 +518,8 @@ class Workspace:
     def emplacements(self, pid: str) -> list[dict]:
         """Toutes les images du pack (couverture, options, histoires, étapes), avec la graine du build."""
         path = self.pack_path(pid)
-        pk = load_pack(path)
-        raw = _rt().load(path.read_text(encoding="utf-8"))
+        pk = lire_pack(path)
+        raw = lire_raw(path)
         out = []
 
         def ajout(slot, libelle, chemin, node, graine, groupe):

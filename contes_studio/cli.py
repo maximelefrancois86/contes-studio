@@ -48,7 +48,8 @@ def app(root: Path, port: int = 0) -> None:
         return
     fenetre = webview.create_window("Atelier d'histoires", url, width=1440, height=900, min_size=(1000, 680))
     fenetre.events.shown += lambda: autoriser_micro(fenetre)
-    webview.start()
+    icone = Path(__file__).with_name("static") / "icone-256.png"
+    webview.start(icon=str(icone) if icone.exists() else None)
     serveur.should_exit = True
 
 
