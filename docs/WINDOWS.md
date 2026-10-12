@@ -42,4 +42,7 @@ py -3.12 -m venv %LOCALAPPDATA%\contes-studio\venv
    avant tout ; sinon prévoir micro ou voix faites ailleurs (FEUILLE-DE-ROUTE, 0.4).
 4. **Premier lancement guidé** : choisir le dossier des ateliers, renseigner la clé Freesound,
    tester la carte graphique.
-5. Tester réellement sur une machine Windows : rien n'a encore été exécuté sous Windows.
+5. **Micro** : WebView2 demande l'autorisation la première fois (cliquer « Autoriser »). Sous Linux,
+   l'atelier accepte lui-même les demandes de micro de sa page (WebKitGTK refuse sinon).
+   À faire : accepter aussi automatiquement sous Windows (événement `PermissionRequested` de WebView2).
+6. Tester réellement sur une machine Windows : rien n'a encore été exécuté sous Windows.

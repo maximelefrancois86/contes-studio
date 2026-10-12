@@ -46,9 +46,41 @@ def app(root: Path, port: int = 0) -> None:
         webbrowser.open(url)
         fil.join()
         return
-    webview.create_window("Atelier d'histoires", url, width=1440, height=900, min_size=(1000, 680))
+    fenetre = webview.create_window("Atelier d'histoires", url, width=1440, height=900, min_size=(1000, 680))
+    fenetre.events.shown += lambda: autoriser_micro(fenetre)
     webview.start()
     serveur.should_exit = True
+
+
+def autoriser_micro(fenetre) -> bool:
+    """Linux (WebKitGTK) : sans réponse de l'application, WebKit refuse le micro. L'atelier est une page
+    locale : on accepte ses demandes de micro (enregistrer les voix), et seulement celles-là.
+    Windows (WebView2) affiche sa propre demande d'autorisation. Renvoie True si le branchement est fait."""
+    import sys
+
+    if "webview.platforms.gtk" not in sys.modules:
+        return False
+    try:
+        from gi.repository import GLib, WebKit2
+        from webview.platforms.gtk import BrowserView
+    except Exception:  # noqa: BLE001
+        return False
+    vue = BrowserView.instances.get(fenetre.uid)
+    if vue is None:
+        return False
+
+    def demande(_webview, requete) -> bool:
+        if isinstance(requete, WebKit2.UserMediaPermissionRequest):
+            requete.allow()
+            return True
+        return False  # autres demandes (notifications, position…) : comportement par défaut
+
+    def brancher() -> bool:
+        vue.webview.connect("permission-request", demande)
+        return False  # à exécuter une seule fois
+
+    GLib.idle_add(brancher)  # dans le fil de l'interface GTK
+    return True
 
 
 def _verifier_environnement() -> None:
