@@ -18,5 +18,9 @@ class CacheVoix:
         self._b = b
         self.dir = cache_dir / b.name
 
-    def path(self, texte: str, voice, ton: str | None) -> Path | None:
-        return self._b._cache_path(prononcer(texte), voice, get_tone(ton or voice.tone))
+    def path(self, texte: str, voice, ton: str | None, prise: int = 0) -> Path | None:
+        return self._b._cache_path(prononcer(texte), voice, get_tone(ton or voice.tone), prise)
+
+    def prises(self, texte: str, voice, ton: str | None, courante: int = 0) -> list[int]:
+        """Prises déjà synthétisées pour cette réplique (0, 1, 2…)."""
+        return [k for k in range(0, max(courante, 0) + 4) if (p := self.path(texte, voice, ton, k)) and p.exists()]

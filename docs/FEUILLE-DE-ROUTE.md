@@ -35,9 +35,23 @@ enchaînées.
 - Générateur : décisions partagées (`decisions:`), mode brouillon pour les packs en construction.
 - Fenêtre de bureau : `python -m contes_studio app` (pywebview).
 
+**0.3 — Voix et boucles.**
+- Onglet **Voix** : on travaille un personnage, puis le suivant. Pour chaque réplique : écouter,
+  faire, refaire (nouvelle prise ; on navigue entre les prises et on garde la meilleure),
+  enregistrer au micro (texte et ton affichés en grand, vu-mètre) ou déposer un fichier audio.
+  « Faire ses voix » et « Faire toutes les voix » en lot.
+- Moteur de voix gardé en mémoire quelques minutes : refaire une réplique prend 4 s au lieu d'une
+  minute. Il tient le verrou de la carte graphique et s'arrête seul.
+- Réglages : capacités pour les voix, installation guidée de Qwen3-TTS et de ses modèles ; sans
+  carte adaptée, micro et fichiers seulement.
+- Générateur : `prise:` (clé de cache) et `audio:` (voix enregistrée) par réplique ; les boucles
+  sont permises (labyrinthe, histoire « blague » sans fin).
+- Thème aux couleurs choisies (turquoise, blanc, crème, orange, corail) ; lanceurs `atelier.sh`
+  et `atelier.bat`.
+
 ## Prochaines étapes
 
-**0.3 — Pour Pépé, sous Windows.**
+**0.4 — Pour Pépé, sous Windows.**
 - Paquet Windows : installeur ou dossier autonome (PyInstaller), icône, mises à jour simples
   (voir [WINDOWS.md](WINDOWS.md)).
 - Tout en formulaires : voix du casting (description, ton, écoute), titre et description du pack,
@@ -46,15 +60,13 @@ enchaînées.
   Freesound, test de la carte graphique).
 - Bouton « Fabriquer » : vérification complète, voix, mixage, archive ; progression en direct.
 
-**0.4 — Voix.**
-- File de tâches GPU partagée avec le générateur.
-- « Refaire la voix » d'une réplique (nouvelle prise, comparaison, choix de la prise).
-- Enregistrement au micro, normalisé au niveau des voix de synthèse.
-- Question ouverte : l'ordinateur de Pépé a-t-il une carte NVIDIA d'au moins 8 Go ? Sinon, les voix
-  synthétiques ne pourront pas être faites chez lui : micro, voix faites sur un autre ordinateur,
-  ou service en ligne (à étudier, avec ses conditions).
+**0.5 — Voix (suite).**
+- Casting en formulaire : décrire une voix, choisir son ton, l'écouter, la régénérer.
+- Voix du narrateur pour le titre, les questions et les choix : enregistrables au micro aussi.
+- Question ouverte : l'ordinateur de Pépé a-t-il une carte NVIDIA d'au moins 8 Go ? Sinon : micro,
+  voix faites sur un autre ordinateur, ou service en ligne (à étudier, avec ses conditions).
 
-**0.5 — Agent IA (Kilo Code).**
+**0.6 — Agent IA (Kilo Code).**
 - Chaque atelier a son `AGENTS.md` (chargé automatiquement par Kilo Code) : règles d'écriture
   (BRIEF), format du pack, univers et personnages, consignes propres à l'histoire.
 - Page « Directives » dans l'atelier pour le rédiger en formulaire.
@@ -63,7 +75,7 @@ enchaînées.
 - Un atelier = un dossier ouvrable dans VS Code + Kilo Code (`histoires/<pack>/` : pack, images,
   positions, AGENTS.md).
 
-**0.6 — Conteuse sans Java.** Lecture du `.md` (v2, v3), conversion archive → format de
+**0.7 — Conteuse sans Java.** Lecture du `.md` (v2, v3), conversion archive → format de
 l'appareil, chiffrement v3, transfert ; tests octet par octet contre STUdio 0.4.2, puis sur une
 copie du dossier de l'appareil, puis sur l'appareil après sauvegarde. Réutiliser Lunii.QT
 (GPL-3.0) autant que possible.

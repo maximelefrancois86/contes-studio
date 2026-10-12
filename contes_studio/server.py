@@ -7,7 +7,7 @@ import os
 import threading
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -78,6 +78,19 @@ class OpLigne(BaseModel):
     sens: int = 0
 
 
+class CibleVoix(BaseModel):
+    section: str
+    i: int
+    j: int
+    prise: int = 0
+
+
+class FaireVoix(BaseModel):
+    cibles: list[list] | None = None
+    qui: str | None = None
+    tout: bool = False
+
+
 class Proposer(BaseModel):
     n: int | None = None
     description: str | None = None
@@ -87,6 +100,20 @@ def _png(img) -> Response:
     buf = io.BytesIO()
     img.save(buf, "PNG")
     return Response(buf.getvalue(), media_type="image/png", headers={"Cache-Control": "no-store"})
+
+
+def ffmpeg_exe() -> str:
+    import shutil
+
+    exe = shutil.which("ffmpeg")
+    if exe:
+        return exe
+    try:
+        import imageio_ffmpeg
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except ImportError as e:
+        raise RuntimeError("ffmpeg introuvable (installer imageio-ffmpeg)") from e
 
 
 def create_app(root: Path, reglages: Reglages | None = None) -> FastAPI:
@@ -452,6 +479,8 @@ def create_app(root: Path, reglages: Reglages | None = None) -> FastAPI:
         negatif = reg.get("illustrations", "negatif", defaut="")
 
         def run(t):
+            for m in moteurs.values():  # le moteur de voix garde la carte graphique : on l'arrête
+                m.arreter()
             c = _comfy()
             if not c.connecte():
                 t.log("Démarrage de ComfyUI…")
@@ -463,6 +492,148 @@ def create_app(root: Path, reglages: Reglages | None = None) -> FastAPI:
             return [{"jeton": brouillons.ajouter(im), **traitement.analyse(im)} for im in imgs]
 
         return taches.lancer(f"Propositions pour « {e['libelle']} »", run).public()
+
+    # -- voix ------------------------------------------------------------------------
+    from . import voix_moteur as vm
+
+    moteurs: dict[str, vm.MoteurVoix] = {}
+
+    def moteur() -> vm.MoteurVoix:
+        py = reg.get("voix", "python", defaut="") or ""
+        if py not in moteurs:
+            for m in moteurs.values():
+                m.arreter()
+            moteurs.clear()
+            moteurs[py] = vm.MoteurVoix(py)
+        return moteurs[py]
+
+    @app.get("/api/moteur-voix/etat")
+    def etat_voix():
+        c = _comfy()
+        cap = capacites.rapport(c.url, str(c.python), reg.get("voix", "dossier"))
+        verdict, raisons = vm.verdict_voix(cap)
+        m = moteur()
+        ok, msg = m.installe()
+        mods = vm.modeles_presents()
+        from lunii_gen.paths import GEN
+
+        plan = [] if ok else vm.etapes_installation(Path(reg.get("voix", "dossier")), cap, GEN)
+        return {"capacites": cap, "verdict": verdict, "raisons": raisons, "installe": ok, "message": msg,
+                "modeles": mods, "pret": ok and all(mods.values()), "en_marche": m.en_marche(),
+                "python": reg.get("voix", "python"), "plan": [{"titre": e["titre"], "erreur": e.get("erreur")} for e in plan]}
+
+    @app.post("/api/moteur-voix/installer")
+    def installer_voix():
+        from lunii_gen.paths import GEN
+
+        c = _comfy()
+        cap = capacites.rapport(c.url, str(c.python), reg.get("voix", "dossier"))
+        if vm.verdict_voix(cap)[0] == "deconseille":
+            raise HTTPException(400, "Cet ordinateur n'est pas assez puissant pour les voix : enregistre-les au micro.")
+
+        def run(t):
+            res = vm.installer(Path(reg.get("voix", "dossier")), cap, GEN, t)
+            reg.maj({"voix": {"python": res["python"]}})
+            return res
+
+        return taches.lancer("Installation des voix", run).public()
+
+    @app.post("/api/moteur-voix/arreter")
+    def arreter_voix():
+        moteur().arreter()
+        return {"ok": True}
+
+    def _lancer_voix(pid: str, demande: dict, titre: str):
+        import uuid as _uuid
+
+        demande = {"id": _uuid.uuid4().hex[:10], "espace": str(root), "pack": pid, **demande}
+        return taches.lancer(titre, lambda t: moteur().faire(demande, t)).public()
+
+    @app.post("/api/packs/{pid}/voix/faire")
+    def faire_voix(pid: str, f: FaireVoix):
+        ws.pack_path(pid)
+        titre = "Voix de " + (f.qui or "toutes les répliques") if not f.cibles else f"{len(f.cibles)} voix"
+        return _lancer_voix(pid, {"cibles": f.cibles, "qui": f.qui, "tout": f.tout}, titre)
+
+    def _ligne(pid: str, c: CibleVoix) -> dict:
+        data = ws.pack(pid, voix.path)
+        sec = next((x for x in data["sections"] if x["section"] == c.section and x["i"] == c.i), None)
+        lg = next((l for l in (sec or {}).get("lignes", []) if l["j"] == c.j), None)
+        if not lg or lg["kind"] != "replique":
+            raise HTTPException(404, "Réplique introuvable")
+        return lg
+
+    @app.post("/api/packs/{pid}/voix/refaire")
+    def refaire_voix(pid: str, c: CibleVoix):
+        """Nouvelle prise : la réplique passe à la prise suivante, puis elle est synthétisée."""
+        lg = _ligne(pid, c)
+        nouvelle = max([lg.get("prise") or 0] + (lg.get("prises") or [])) + 1
+        try:
+            ws.champs_ligne(pid, c.section, c.i, c.j, prise=nouvelle)
+        except EditError as e:
+            erreur(e)
+        return _lancer_voix(pid, {"cibles": [[c.section, c.i, c.j]]}, f"Nouvelle prise ({nouvelle + 1})")
+
+    @app.post("/api/packs/{pid}/voix/prise")
+    def choisir_prise(pid: str, c: CibleVoix):
+        try:
+            ws.champs_ligne(pid, c.section, c.i, c.j, prise=max(0, c.prise))
+        except EditError as e:
+            erreur(e)
+        return _ligne(pid, c)
+
+    @app.post("/api/packs/{pid}/voix/enregistrement")
+    async def enregistrer(pid: str, section: str = Form(...), i: int = Form(...), j: int = Form(...),
+                          fichier: UploadFile = File(...)):
+        """Voix enregistrée au micro ou fichier déposé (MP3, WAV, OGG, M4A, WEBM…), convertie en WAV mono."""
+        import subprocess
+        import tempfile
+        import uuid as _uuid
+
+        lg = _ligne(pid, CibleVoix(section=section, i=i, j=j))
+        data = await fichier.read(40 * 1024 * 1024 + 1)
+        if len(data) > 40 * 1024 * 1024:
+            raise HTTPException(400, "Fichier trop lourd (40 Mo au plus)")
+        d = ws.stories_dir / pid / "voix"
+        d.mkdir(parents=True, exist_ok=True)
+        nom = f"{lg['qui']}-{section[0]}{i}-{j}-{_uuid.uuid4().hex[:6]}.wav"
+        with tempfile.NamedTemporaryFile(suffix=Path(fichier.filename or "x").suffix or ".bin", delete=False) as tmp:
+            tmp.write(data)
+        try:
+            r = subprocess.run([ffmpeg_exe(), "-y", "-v", "error", "-i", tmp.name, "-t", "300", "-ac", "1", "-ar", "24000",
+                                "-c:a", "pcm_s16le", str(d / nom)], capture_output=True, text=True, timeout=120)
+        finally:
+            Path(tmp.name).unlink(missing_ok=True)
+        if r.returncode != 0 or not (d / nom).exists() or (d / nom).stat().st_size < 2000:
+            (d / nom).unlink(missing_ok=True)
+            raise HTTPException(400, "Ce fichier ne contient pas de son lisible")
+        ancien = lg.get("enregistrement")
+        try:
+            ws.champs_ligne(pid, section, i, j, audio=f"{pid}/voix/{nom}")
+        except EditError as e:
+            (d / nom).unlink(missing_ok=True)
+            erreur(e)
+        if ancien and (ws.stories_dir / ancien).exists():
+            (ws.stories_dir / ancien).unlink()
+        return _ligne(pid, CibleVoix(section=section, i=i, j=j))
+
+    @app.post("/api/packs/{pid}/voix/enregistrement/retirer")
+    def retirer_enregistrement(pid: str, c: CibleVoix):
+        lg = _ligne(pid, c)
+        try:
+            ws.champs_ligne(pid, c.section, c.i, c.j, audio=None)
+        except EditError as e:
+            erreur(e)
+        if lg.get("enregistrement") and (ws.stories_dir / lg["enregistrement"]).exists():
+            (ws.stories_dir / lg["enregistrement"]).unlink()
+        return _ligne(pid, c)
+
+    @app.get("/api/packs/{pid}/voix/fichier/{nom}")
+    def fichier_voix(pid: str, nom: str):
+        p = ws.stories_dir / pid / "voix" / nom
+        if "/" in nom or "\\" in nom or not p.is_file():
+            raise HTTPException(404, "Enregistrement introuvable")
+        return FileResponse(p, media_type="audio/wav")
 
     # -- interface -----------------------------------------------------------------
     app.mount("/static", StaticFiles(directory=STATIC), name="static")

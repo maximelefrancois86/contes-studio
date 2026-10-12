@@ -29,7 +29,7 @@ vérification complète, celle du build, produit la liste « à compléter » du
 **Graphe (onglet Flot).** Couverture → étape (un fichier audio) → décision (une entrée, une sortie
 par choix). Dans le YAML : `debut`, `etapes[].ensuite` (absent = fin, id d'étape = suite
 automatique, id de `decisions:` = décision partagée, dictionnaire = décision propre à l'étape) et
-`decisions:`. Accrocher une deuxième étape à une décision propre la rend partagée. Les
+`decisions:`. Les boucles sont permises. Accrocher une deuxième étape à une décision propre la rend partagée. Les
 modifications de structure réécrivent le fichier avec ruamel (sans perte sur les aventures) ; les
 positions à l'écran sont dans `histoires/<pack>/flot.json`.
 
@@ -46,6 +46,15 @@ existantes). L'image choisie est enregistrée dans `histoires/<pack>/images/` et
 **Tâches de fond.** Installation et génération tournent dans des tâches suivies par l'interface
 (journal, progression, annulation). Le travail sur la carte graphique prend le verrou partagé avec
 le générateur (`~/.cache/lunii-gpu.lock`).
+
+**Moteur de voix.** `voix_travail.py` tourne dans l'environnement Python de Qwen3-TTS (un autre que
+celui de l'atelier) et n'importe que le générateur : une demande JSON par ligne (répliques précises,
+un personnage, ou tout le pack), des messages de progression en retour. Il garde le modèle chargé
+et s'arrête après 3 minutes sans demande. `voix_moteur.py` le lance, lui transmet les demandes depuis
+des tâches de fond, et tient le verrou de la carte graphique tant qu'il tourne ; la génération
+d'images l'arrête d'abord. Une prise (`prise:` dans la réplique) change la clé de cache sans toucher
+aux voix existantes (la prise 0 garde l'ancienne clé). Une voix enregistrée (`audio:`, fichier WAV
+mono 24 kHz dans `histoires/<pack>/voix/`) remplace la synthèse au mixage.
 
 **Voix.** La clé de cache est celle du générateur (texte prononcé, voix, ton, réglages du modèle) :
 l'atelier retrouve le fichier d'une réplique sans charger le modèle. Une réplique modifiée n'a plus

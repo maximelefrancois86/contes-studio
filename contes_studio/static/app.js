@@ -9,7 +9,7 @@ const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "
 const audio = $("#audio");
 const S = { pid: null, onglet: "flot", pack: null, sec: 0, cur: null, chain: false, v: Date.now(),
   sons: { type: "bruitage", fournisseur: "freesound", q: "", page: 1 } };
-const ONGLETS = ["flot", "repliques", "sons", "illustrations"];
+const ONGLETS = ["flot", "repliques", "voix", "sons", "illustrations"];
 
 function toast(msg, err = false) {
   const t = $("#toast"); t.textContent = msg; t.className = "show" + (err ? " err" : "");
@@ -56,7 +56,7 @@ async function route() {
     $$("#onglets a").forEach((a) => { a.classList.toggle("on", a.dataset.o === S.onglet); a.href = `#/atelier/${S.pid}/${a.dataset.o}`; });
     const titre = (await api("/api/packs")).find((x) => x.id === S.pid)?.titre || S.pid;
     $("#titre").textContent = titre; document.title = `${titre} · Atelier`;
-    return ({ flot: vueFlot, repliques: vueRepliques, sons: vueSons, illustrations: vueIllustrations })[S.onglet]();
+    return ({ flot: vueFlot, repliques: vueRepliques, voix: vueVoix, sons: vueSons, illustrations: vueIllustrations })[S.onglet]();
   }
   if (p[0] === "reglages") { $("#b-galerie").hidden = false; $("#titre").textContent = "Réglages"; return vueReglages(); }
   $("#titre").textContent = "Mes ateliers"; document.title = "Atelier d'histoires";
@@ -194,8 +194,9 @@ function renderRepliques() {
         <td class="q"><select data-f="qui">${opts(p.voix.map((v) => v.nom), l.qui)}</select></td>
         <td class="t"><select data-f="ton">${opts(p.tons, l.ton, "ton de la voix (" + (l.ton_effectif || "neutre") + ")")}</select></td>
         <td><textarea data-f="texte" rows="1">${esc(l.texte)}</textarea></td>
-        <td class="a">${l.audio ? `<button class="play" data-a="${esc(l.audio)}" title="Écouter">▶</button>`
-          : `<span class="manque" title="Voix à refaire : texte, ton ou personnage modifié. Elle sera synthétisée à la prochaine fabrication.">!</span>`}
+        <td class="a">${l.enregistrement ? `<button class="play" data-fichier-voix="${esc(l.enregistrement.split("/").pop())}" title="Écouter l'enregistrement (🎙)">▶</button>`
+          : l.audio ? `<button class="play" data-a="${esc(l.audio)}" title="Écouter">▶</button>`
+          : `<span class="manque" title="Voix à faire : onglet Voix (synthèse ou micro)">!</span>`}
           <button class="plus" data-plus="${l.j}" title="Ajouter un son après cette réplique">♪</button>
           <span class="outils-ligne"><button data-op="ajouter" data-j="${l.j}" title="Nouvelle réplique en dessous">＋</button><button data-op="monter" data-j="${l.j}" title="Monter">↑</button><button data-op="descendre" data-j="${l.j}" title="Descendre">↓</button><button data-op="supprimer" data-j="${l.j}" title="Supprimer">🗑</button></span></td>
       </tr>` : `<tr class="son"><td class="n">${l.j + 1}</td><td colspan="3">${l.kind === "pause" ? `⏸ pause ${l.pause ?? ""} s`
@@ -225,6 +226,7 @@ function bindRepliques() {
     ta.onkeydown = (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); ta.blur(); } };
   });
   $$(".play[data-a]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); stopChain(); jouer(`/api/voix/${b.dataset.a}`); }));
+  $$(".play[data-fichier-voix]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); stopChain(); jouer(`/api/packs/${S.pid}/voix/fichier/${b.dataset.fichierVoix}`); }));
   $$(".play[data-son]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); stopChain(); jouer(`/api/packs/${S.pid}/sons/${b.dataset.son}/audio`); }));
   $$(".plus").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); ajouterSonApres(+b.dataset.plus); }));
   $$("[data-op]").forEach((b) => (b.onclick = async (e) => {
@@ -288,9 +290,9 @@ function jouer(url) { audio.src = url; audio.play().catch(() => {}); }
 const reps = () => S.pack.sections[S.sec].lignes.filter((l) => l.kind === "replique");
 const premiere = () => reps()[0]?.j ?? 0;
 function jouerDepuis(j) {
-  const l = reps().find((x) => x.j >= j && x.audio);
+  const l = reps().find((x) => x.j >= j && (x.audio || x.enregistrement));
   if (!l) { stopChain(); return; }
-  select(l.j); jouer(`/api/voix/${l.audio}`); S.playing = l.j;
+  select(l.j); jouer(l.enregistrement ? `/api/packs/${S.pid}/voix/fichier/${l.enregistrement.split("/").pop()}` : `/api/voix/${l.audio}`); S.playing = l.j;
 }
 function stopChain() { S.chain = false; audio.pause(); }
 audio.onended = () => { if (S.chain && S.onglet === "repliques") jouerDepuis(S.playing + 1); };
@@ -481,10 +483,29 @@ function recadrer(slot, d) {
 
 /* ------------------------------------------------------------ réglages */
 async function vueReglages() {
-  const [r, four, etat] = await Promise.all([api("/api/reglages"), api("/api/sons/fournisseurs"), api("/api/illustrations/etat")]);
+  const [r, four, etat, ev] = await Promise.all([api("/api/reglages"), api("/api/sons/fournisseurs"), api("/api/illustrations/etat"), api("/api/moteur-voix/etat")]);
   const cf = r.illustrations.comfyui; const cap = etat.capacites; const ec = etat.comfyui;
   const VERDICT = { recommande: ["recommandée", "ok"], possible: ["possible, mais lente", "warn"], deconseille: ["déconseillée", "err"] };
+  const VD = { recommande: ["possible", "ok"], possible: ["possible, à vérifier", "warn"], deconseille: ["impossible ici : enregistre au micro", "err"] };
   $("#main").innerHTML = `<div class="reglages">
+    <section class="panneau"><h2>Voix</h2>
+      <table class="tableau-cap"><tbody>
+        <tr><td>Voix de synthèse</td><td><span class="pastille ${VD[ev.verdict][1]}">${VD[ev.verdict][0]}</span> ${ev.raisons.map(esc).join(" · ")}</td></tr>
+        <tr><td>Moteur (Qwen3-TTS)</td><td>${ev.pret ? `<span class="pastille ok">installé</span>` : ev.installe ? `<span class="pastille warn">modèles à télécharger</span>` : `<span class="pastille">non installé</span>`}
+          ${ev.en_marche ? `<span class="pastille ok" title="Il garde la carte graphique ; il s'arrête seul après 3 minutes sans travail">en marche</span>` : ""}</td></tr>
+      </tbody></table>
+      <div class="rangee" style="margin:10px 0">
+        ${!ev.pret && ev.verdict !== "deconseille" ? `<button class="bouton principal" id="v-inst" title="Installe PyTorch, Qwen3-TTS et ses modèles (environ 11 Go)">Installer les voix (environ 11 Go)</button>` : ""}
+        ${ev.en_marche ? `<button class="bouton" id="v-stop" title="Libérer la carte graphique maintenant">Arrêter le moteur</button>` : ""}
+        ${ev.verdict === "deconseille" ? `<span class="aide">Sur cet ordinateur, enregistre les voix au micro (onglet Voix) ou dépose des fichiers audio.</span>` : ""}
+      </div>
+      ${ev.plan.length && ev.verdict !== "deconseille" ? `<details><summary>Ce que fera l'installation</summary><ol>${ev.plan.map((p) => `<li>${esc(p.titre)}${p.erreur ? ` <span class="avert">${esc(p.erreur)}</span>` : ""}</li>`).join("")}</ol></details>` : ""}
+      <div id="v-itache" hidden><progress id="v-iprog"></progress><div class="journal" id="v-ijournal"></div><button class="bouton" id="v-iannul">Annuler</button></div>
+      <details><summary>Réglages avancés</summary>
+        <div class="champ"><label title="Python de l'environnement qui contient Qwen3-TTS">Python des voix</label><input type="text" id="v-python" value="${esc(r.voix.python)}"></div>
+        <div class="champ"><label title="Où installer l'environnement des voix">Dossier d'installation</label><input type="text" id="v-dossier" value="${esc(r.voix.dossier)}"></div>
+        <button class="bouton" id="v-enr">Enregistrer</button></details>
+    </section>
     <section class="panneau"><h2>Sons</h2>
       ${four.fournisseurs.map((f) => `<div data-four="${f.id}"><p><b>${esc(f.nom)}</b> · <span class="aide">${esc(f.licences)}</span>
         <span class="pastille ${f.pret ? "ok" : "warn"}">${f.pret ? "prêt" : "à configurer"}</span></p>
@@ -556,6 +577,17 @@ async function vueReglages() {
     toast(s.etat === "terminée" ? `${quoi} : terminé` : `${quoi} : ${s.erreur || s.etat}`, s.etat !== "terminée");
     if (s.etat === "terminée") vueReglages();
   };
+  $("#v-enr").onclick = async () => { await api("/api/reglages", { method: "PUT", json: { voix: { python: $("#v-python").value, dossier: $("#v-dossier").value } } }); toast("Enregistré"); vueReglages(); };
+  $("#v-stop")?.addEventListener("click", async () => { await api("/api/moteur-voix/arreter", { method: "POST" }); vueReglages(); });
+  $("#v-inst")?.addEventListener("click", async () => {
+    if (!confirm("Télécharger et installer le moteur de voix (environ 11 Go) ? Cela peut prendre une heure.")) return;
+    $("#v-itache").hidden = false;
+    const t = await api("/api/moteur-voix/installer", { method: "POST" }).catch((e) => (toast(e.message, true), null));
+    if (!t) return;
+    $("#v-iannul").onclick = () => api(`/api/taches/${t.id}/annuler`, { method: "POST" });
+    const s = await suivreTache(t, (s) => { $("#v-ijournal") && ($("#v-ijournal").textContent = s.journal.join("\n")); });
+    toast(s.etat === "terminée" ? "Voix installées" : s.erreur || s.etat, s.etat !== "terminée"); vueReglages();
+  });
   $("#c-dem")?.addEventListener("click", () => lancer("/api/illustrations/comfyui/demarrer", "Démarrage"));
   $("#c-inst")?.addEventListener("click", () => {
     if (confirm("Télécharger et installer ComfyUI et le modèle d'images (environ 20 Go) ? L'installation peut prendre une heure.")) lancer("/api/illustrations/comfyui/installer", "Installation");

@@ -47,7 +47,7 @@ def test_creer_une_aventure_de_zero(ws):
     assert pk.adventure and len(pk.stories) == 2
 
 
-def test_rejoindre_une_decision_et_boucle_refusee(ws):
+def test_rejoindre_une_decision_et_boucle_permise(ws):
     v = ws.graphe(AV)
     premiere, derniere = v["decisions"][0], v["decisions"][-1]
     branche = premiere["options"][0]["arc"]  # arc d'une branche du début : on le fait sauter à la dernière décision
@@ -56,10 +56,12 @@ def test_rejoindre_une_decision_et_boucle_refusee(ws):
     assert not any(d["id"] == derniere["id"] for d in v2["decisions"]), "la décision propre devient partagée"
     partagee = next(d for d in v2["decisions"] if d["partagee"])
     assert next(x for x in v2["arcs"] if x["id"] == branche)["vers"] == partagee["id"]
-    apres = partagee["options"][0]["arc"]  # un arc qui part de cette décision ne peut pas y revenir
-    with pytest.raises(EditError, match="boucle"):
-        ws.graphe_op(AV, {"op": "attacher", "arc": apres, "cible": partagee["id"]})
-    load_pack(ws.stories_dir / f"{AV}.yaml")
+    apres = partagee["options"][0]["arc"]  # un arc qui part de cette décision y revient : boucle (labyrinthe)
+    ws.graphe_op(AV, {"op": "attacher", "arc": apres, "cible": partagee["id"]})
+    pk = load_pack(ws.stories_dir / f"{AV}.yaml", strict=True)  # le générateur l'accepte
+    assert any("↺" in st.title for st in pk.stories)
+    from lunii_gen.pack import build_story_json  # l'archive se construit (pas de calcul infini)
+    assert build_story_json
 
 
 def test_suppressions(ws):
@@ -87,3 +89,20 @@ def test_repliques_ajout_suppression_deplacement(ws):
     ws.supprimer_ligne(pid, "histoires", 0, k - 1)
     assert len(ws.pack(pid)["sections"][0]["lignes"]) == n0
     load_pack(f, strict=True)
+
+
+def test_histoire_sans_fin(ws):
+    pid = ws.creer_pack("La blague sans fin", "conteur")
+    a = ws.graphe_op(pid, {"op": "creer_arc", "origine": {"type": "depart"}, "titre": "Le début"})["resultat"]
+    d = ws.graphe_op(pid, {"op": "creer_decision", "question": "On recommence ?"})["resultat"]
+    ws.graphe_op(pid, {"op": "attacher", "arc": a, "cible": d})
+    opts = ws.graphe(pid)["decisions"][0]["options"]
+    b = ws.graphe_op(pid, {"op": "creer_arc", "origine": {"type": "option", "decision": d, "option": opts[0]["id"]}})["resultat"]
+    c = ws.graphe_op(pid, {"op": "creer_arc", "origine": {"type": "option", "decision": d, "option": opts[1]["id"]}})["resultat"]
+    ws.graphe_op(pid, {"op": "attacher", "arc": b, "cible": d})
+    ws.graphe_op(pid, {"op": "attacher", "arc": c, "cible": d})  # aucune fin : on tourne en rond
+    for k in range(3):
+        ws.ajouter_replique(pid, "etapes", k, -1, texte="Ha ha ha.")
+    assert ws.graphe(pid)["a_completer"] == []
+    pk = load_pack(ws.stories_dir / f"{pid}.yaml", strict=True)
+    assert pk.stories and all("↺" in st.title for st in pk.stories)

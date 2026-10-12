@@ -46,9 +46,23 @@ def venv_python(venv: Path) -> Path:
     return venv / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
 
+def _voix_existante() -> tuple[str, str]:
+    """Environnement Qwen3-TTS déjà présent (celui du générateur), sinon emplacement de l'atelier."""
+    from platformdirs import user_data_dir
+
+    for py in (os.environ.get("CONTES_VOIX_PYTHON"), "~/.venvs/qwen3tts/bin/python", "~/.venvs/qwen3tts/Scripts/python.exe"):
+        if py and Path(py).expanduser().exists():
+            p = Path(py).expanduser()
+            return str(p.parents[1]), str(p)
+    d = Path(user_data_dir("contes-studio", appauthor=False)) / "voix"
+    return str(d), str(venv_python(d / ".venv"))
+
+
 def defauts() -> dict:
     d, py = _comfy_existant()
+    vd, vpy = _voix_existante()
     return {
+        "voix": {"dossier": vd, "python": vpy},
         "sons": {"freesound": {"cle": os.environ.get("FREESOUND_TOKEN") or os.environ.get("FREESOUND_API_KEY") or ""}},
         "illustrations": {
             "comfyui": {"url": "http://127.0.0.1:8188", "dossier": d, "python": py,

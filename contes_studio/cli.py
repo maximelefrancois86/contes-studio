@@ -51,7 +51,29 @@ def app(root: Path, port: int = 0) -> None:
     serveur.should_exit = True
 
 
+def _verifier_environnement() -> None:
+    """Message clair si l'atelier est lancé avec un Python où il n'est pas installé."""
+    import importlib.util
+    import sys
+
+    gen = Path(__file__).resolve().parents[2] / "gen"
+    if importlib.util.find_spec("lunii_gen") is None and (gen / "lunii_gen").is_dir():
+        sys.path.insert(0, str(gen))  # espace de travail : le générateur est le dossier voisin
+    def absent(m: str) -> bool:
+        try:
+            return importlib.util.find_spec(m) is None
+        except ModuleNotFoundError:  # paquet parent absent (« ruamel » pour « ruamel.yaml »)
+            return True
+
+    manque = [m for m in ("fastapi", "uvicorn", "ruamel.yaml", "lunii_gen") if absent(m)]
+    if manque:
+        lanceur = "atelier.bat" if sys.platform == "win32" else "./atelier.sh"
+        sys.exit(f"Ce Python ({sys.executable}) n'a pas ce qu'il faut pour l'atelier : {', '.join(manque)} manquant(s).\n"
+                 f"Lance plutôt {lanceur} (dans le dossier studio), qui utilise l'environnement de l'atelier.")
+
+
 def main(argv=None) -> None:
+    _verifier_environnement()
     a = argparse.ArgumentParser(prog="contes-studio", description="Atelier d'histoires audio à choix")
     sub = a.add_subparsers(dest="cmd")
     for nom, aide in (("app", "ouvre l'atelier dans une fenêtre (par défaut)"),

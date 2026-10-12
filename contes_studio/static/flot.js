@@ -92,12 +92,19 @@ function origineNoeud(o) { return o.type === "depart" ? "couverture" : o.type ==
 
 function disposer() {
   const noeuds = noeudsGraphe();
+  // arcs qui reviennent en arrière (boucles : labyrinthe, histoire sans fin) : ignorés pour placer les colonnes
+  const succ = {};
+  for (const a of F.g.arcs) if (a.vers) for (const o of a.origines) (succ[origineNoeud(o)] ||= []).push(a.vers);
+  const etat = {}, retour = new Set();
+  const dfs = (n) => { etat[n] = 1; for (const m of succ[n] || []) { if (etat[m] === 1) retour.add(n + ">" + m); else if (!etat[m]) dfs(m); } etat[n] = 2; };
+  dfs("couverture");
   const niveau = { couverture: 0 };
   for (let tour = 0; tour < noeuds.length + 2; tour++) {
     for (const a of F.g.arcs) {
       if (!a.vers) continue;
       for (const o of a.origines) {
         const src = origineNoeud(o);
+        if (retour.has(src + ">" + a.vers)) continue;
         if (niveau[src] !== undefined && (niveau[a.vers] === undefined || niveau[a.vers] < niveau[src] + 1)) niveau[a.vers] = niveau[src] + 1;
       }
     }
@@ -157,6 +164,10 @@ function finArc(a) {
 
 /* ------------------------------------------------------------- dessin */
 function courbe([x1, y1], [x2, y2]) {
+  if (x2 < x1 + 60) {  // retour en arrière (boucle) : l'arc fait le tour par en dessous des nœuds
+    const xa = x1 + AW + 40, yb = Math.max(y1, y2) + 170;
+    return `M${x1},${y1} H${xa - 60} C${xa + 40},${y1} ${xa + 40},${yb} ${xa - 60},${yb} H${x2 - 60} C${x2 - 150},${yb} ${x2 - 150},${y2} ${x2},${y2}`;
+  }
   const h = Math.min(AW + 20, Math.max(0, x2 - x1 - 40)); const m = Math.max(50, Math.abs(x2 - x1 - h) / 2);
   return `M${x1},${y1} H${x1 + h} C${x1 + h + m},${y1} ${x2 - m},${y2} ${x2},${y2}`;
 }

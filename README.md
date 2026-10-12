@@ -15,7 +15,7 @@ sont des fichiers YAML lisibles, et l'agent suit des directives écrites dans le
 
 ## État
 
-Version 0.2, en construction. Le but : qu'une personne qui ne programme pas crée ses histoires
+Version 0.3, en construction. Le but : qu'une personne qui ne programme pas crée ses histoires
 sur Windows, avec des formulaires, aidée d'un agent IA (Kilo Code).
 
 | Fonction | État |
@@ -27,7 +27,9 @@ sur Windows, avec des formulaires, aidée d'un agent IA (Kilo Code).
 | **Illustrations** : ComfyUI (installation guidée si l'ordinateur le permet) ou dépôt d'image, recadrage 4:3, aperçu en gris, alertes de lisibilité | ✅ |
 | Fenêtre de bureau (pywebview) | ✅ (non testée sous Windows) |
 | Paquet Windows, premier lancement guidé | prévu |
-| Refaire une voix, enregistrement au micro, bouton « Fabriquer » | prévu |
+| **Voix**, personnage par personnage : faire, refaire (prises), enregistrer au micro ou déposer un fichier ; installation guidée de Qwen3-TTS si l'ordinateur le permet | ✅ |
+| Boucles dans le flot (labyrinthe, histoire sans fin) | ✅ |
+| Bouton « Fabriquer » | prévu |
 | Directives pour l'agent IA (`AGENTS.md` par atelier) | prévu |
 | Transfert sur la conteuse sans Java | prévu |
 
@@ -42,7 +44,8 @@ moment) et lit un espace de travail qui contient `histoires/*.yaml` et `.cache/`
 ```bash
 uv venv --python 3.12 ~/.venvs/studio
 uv pip install --python ~/.venvs/studio/bin/python -e ".[bureau,dev]" -e ../gen
-~/.venvs/studio/bin/python -m contes_studio app        # fenêtre de bureau (pip install pywebview)
+./atelier.sh                                           # le plus simple (atelier.bat sous Windows)
+~/.venvs/studio/bin/python -m contes_studio app        # fenêtre de bureau (pywebview)
 ~/.venvs/studio/bin/python -m contes_studio serve      # ou dans un navigateur : http://127.0.0.1:8090
 ~/.venvs/studio/bin/python -m pytest -q tests          # tests
 ```

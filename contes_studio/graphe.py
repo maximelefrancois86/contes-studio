@@ -5,7 +5,8 @@
 - des nœuds **décision** : une entrée (plusieurs arcs peuvent y arriver), une sortie par option ;
 - des nœuds **jonction** : une étape qui en continue d'autres sans question (`ensuite: <étape>`) ;
 - des **arcs** : une étape = un fichier audio, de la sortie d'un nœud à l'entrée d'un autre, ou
-  libre (fin de l'histoire).
+  libre (fin de l'histoire). Une étape peut ramener à une décision déjà passée : les boucles sont
+  permises (labyrinthe, histoire sans fin).
 
 Correspondance avec le YAML du générateur : `debut`, `etapes[].ensuite` (absent = fin, id d'étape =
 jonction, id de `decisions:` = décision partagée, dictionnaire = décision propre à l'étape) et
@@ -232,8 +233,7 @@ class Graphe:
             e["ensuite"] = t
         else:
             e["ensuite"] = self.nommer(cible) if cible.startswith("@") else (self.decision(cible) and cible)
-        if self._boucle():
-            raise EditError("Ce lien ferait revenir l'histoire en arrière (boucle) : impossible")
+        # les boucles sont permises : labyrinthe, histoire « blague » sans fin…
 
     def _suivants(self, sid: str) -> list[str]:
         ens = self.etape(sid).get("ensuite")

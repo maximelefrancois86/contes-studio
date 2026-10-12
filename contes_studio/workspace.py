@@ -99,10 +99,15 @@ class Workspace:
                         voice = pk.voices.get(qui)
                         ton = ln.tone or (voice.tone if voice else None)
                         d = {"j": j, "kind": "replique", "qui": qui, "ton": ln.tone, "ton_effectif": ton,
-                             "texte": ln.text, "pause": ln.pause or None}
+                             "texte": ln.text, "pause": ln.pause or None, "prise": ln.prise,
+                             "didascalie": _didascalie(ton),
+                             "enregistrement": ln.audio if ln.audio and (path.parent / ln.audio).exists() else None}
                         if audio_path and voice:
-                            ap = audio_path(ln.text, voice, ton)
+                            ap = audio_path(ln.text, voice, ton, ln.prise)
                             d["audio"] = ap.name if ap and ap.exists() else None
+                            prises = getattr(audio_path, "__self__", None)
+                            if prises is not None and hasattr(prises, "prises"):
+                                d["prises"] = prises.prises(ln.text, voice, ton, ln.prise)
                         lines.append(d)
                 sections.append({"section": sec, "i": i, "id": str(item.get("id", i)),
                                  "titre": item.get("titre") or str(item.get("id", i)),
@@ -538,6 +543,37 @@ class Workspace:
         self._check_and_write(path, echanger_elements(src, raw, [section, i, "lignes"], j, k))
         return k
 
+    def champs_ligne(self, pid: str, section: str, i: int, j: int, **champs) -> None:
+        """Champs d'une réplique : `prise` (0 = première prise, retirée du fichier) et `audio` (voix
+        enregistrée, None = revenir à la synthèse). La réplique passe en forme dictionnaire au besoin."""
+        path = self.pack_path(pid)
+        src = path.read_text(encoding="utf-8")
+        raw = _rt().load(src)
+        try:
+            seq = raw[section][i]["lignes"]
+            item = seq[j]
+        except (KeyError, IndexError, TypeError) as e:
+            raise EditError(f"Réplique introuvable : {section}[{i}].lignes[{j}]") from e
+        if isinstance(item, dict) and set(item) & {"bruit", "musique", "ambiance"}:
+            raise EditError("Cette ligne n'est pas une réplique")
+        d = _en_dict(_plain(item))
+        for k, v in champs.items():
+            if v in (None, 0, ""):
+                d.pop(k, None)
+            else:
+                d[k] = v
+        ordre = ["qui", "voix", "ton", "texte", "text", "prise", "audio"]
+        d = {k: d[k] for k in ordre if k in d} | {k: v for k, v in d.items() if k not in ordre}
+        if set(d) <= {"qui", "ton", "texte"} and "qui" in d:  # plus de champ particulier : forme courte
+            nouveau = [d["qui"], d["ton"], d["texte"]] if d.get("ton") else [d["qui"], d["texte"]]
+        else:
+            nouveau = d
+        from .edition import _position, _remplacer, _span
+
+        ligne, col = _position(raw, [section, i, "lignes", j])
+        fin, _ = _span(src.splitlines(keepends=True), ligne, col, item)
+        self._check_and_write(path, _remplacer(src, ligne, col, fin, _flow(nouveau)))
+
     def _check_and_write(self, path: Path, text: str, nouveau: bool = False) -> None:
         fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.stem}-", suffix=".tmp")
         try:
@@ -551,6 +587,13 @@ class Workspace:
         finally:
             if os.path.exists(tmp):
                 os.unlink(tmp)
+
+
+def _didascalie(ton: str | None) -> str | None:
+    try:
+        return get_tone(ton).instruct if ton else None
+    except KeyError:
+        return None
 
 
 def _est_aventure(f: Path) -> bool:
@@ -581,6 +624,15 @@ def _plain(v):
     if isinstance(v, (list, tuple)):
         return [_plain(x) for x in v]
     return v if isinstance(v, (int, float, bool)) or v is None else str(v)
+
+
+def _en_dict(it) -> dict:
+    """Réplique sous forme de dictionnaire, quelle que soit sa forme dans le fichier."""
+    if isinstance(it, str):
+        return {"texte": it}
+    if isinstance(it, list):
+        return {"qui": it[0], "texte": it[1]} if len(it) == 2 else {"qui": it[0], "ton": it[1], "texte": it[2]}
+    return dict(it)
 
 
 def _edited(item, *, texte, qui, ton):
